@@ -7,14 +7,15 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include <stdbool.h>
 
 static FILE *fptr_malloc, *fptr_calloc, *fptr_realloc, *fptr_free;
 static void *(*real_malloc)(size_t) = NULL;
 static void *(*real_calloc)(size_t, size_t) = NULL;
 static void *(*real_realloc)(void *, size_t) = NULL;
 static void (*real_free)(void *) = NULL;
-static char CAPTURE_INFO = 0;
-static char use_real_funcs = 0;
+static bool CAPTURE_INFO = false;
+static bool use_real_funcs = true;
 
 inline struct timespec sub_timespec(const struct timespec *restrict t1,
                                     const struct timespec *restrict t2) {
@@ -46,7 +47,8 @@ inline void write_data(FILE *restrict file, size_t size,
 }
 
 __attribute__((constructor)) static void initValues(void) {
-  use_real_funcs = 1;
+  bool previous_value = use_real_funcs;
+  use_real_funcs = true;
   if (!real_malloc) {
     real_malloc = dlsym(RTLD_NEXT, "malloc");
   }
@@ -59,11 +61,11 @@ __attribute__((constructor)) static void initValues(void) {
   if (!real_free) {
     real_free = dlsym(RTLD_NEXT, "free");
   }
-  use_real_funcs = 0;
+  use_real_funcs = previous_value;
 }
 
 void start_capture(char *restrict path) {
-  use_real_funcs = 1;
+  use_real_funcs = true;
   if (!path) {
     printf("No path provided");
     exit(0);
@@ -103,12 +105,13 @@ void start_capture(char *restrict path) {
     printf("Failed to start free capture as already capturing");
     exit(0);
   }
-  CAPTURE_INFO = 1;
-  use_real_funcs = 0;
+  CAPTURE_INFO = true;
+  use_real_funcs = false;
 }
 
 void stop_capture() {
-  use_real_funcs = 1;
+  use_real_funcs = true;
+  CAPTURE_INFO = false;
   if (fptr_malloc) {
     fclose(fptr_malloc);
     fptr_malloc = NULL;
@@ -139,9 +142,6 @@ void stop_capture() {
     printf("Failed to stop free capture as not capturing");
     exit(0);
   }
-
-  CAPTURE_INFO = 0;
-  use_real_funcs = 0;
 }
 
 void *malloc(size_t size) {
@@ -150,15 +150,14 @@ void *malloc(size_t size) {
   }
 
   struct timespec start, stop;
-  use_real_funcs = 1;
+  use_real_funcs = true;
   clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &start);
-  use_real_funcs = 0;
+  // use_real_funcs = false;
   char *p = real_malloc(size);
-  use_real_funcs = 1;
+  // use_real_funcs = 1;
   clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &stop);
   write_data(fptr_malloc, size, &start, &stop);
-  use_real_funcs = 0;
-
+  use_real_funcs = false;
   return p;
 }
 
@@ -168,14 +167,14 @@ void *calloc(size_t num, size_t size) {
   }
 
   struct timespec start, stop;
-  use_real_funcs = 1;
+  use_real_funcs = true;
   clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &start);
-  use_real_funcs = 0;
+  // use_real_funcs = 0;
   char *p = real_calloc(num, size);
-  use_real_funcs = 1;
+  // use_real_funcs = 1;
   clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &stop);
   write_data(fptr_calloc, size * num, &start, &stop);
-  use_real_funcs = 0;
+  use_real_funcs = false;
 
   return p;
 }
@@ -186,14 +185,14 @@ void *realloc(void *ptr, size_t size) {
   }
 
   struct timespec start, stop;
-  use_real_funcs = 1;
+  use_real_funcs = true;
   clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &start);
-  use_real_funcs = 0;
+  // use_real_funcs = 0;
   char *p = real_realloc(ptr, size);
-  use_real_funcs = 1;
+  // use_real_funcs = 1;
   clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &stop);
   write_data(fptr_realloc, size, &start, &stop);
-  use_real_funcs = 0;
+  use_real_funcs = false;
 
   return p;
 }
@@ -204,14 +203,14 @@ void free(void *ptr) {
   }
 
   struct timespec start, stop;
-  use_real_funcs = 1;
+  use_real_funcs = true;
   size_t size = malloc_usable_size(ptr);
   clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &start);
-  use_real_funcs = 0;
+  // use_real_funcs = 0;
   real_free(ptr);
-  use_real_funcs = 1;
+  // use_real_funcs = 1;
   clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &stop);
   write_data(fptr_free, size, &start, &stop);
-  use_real_funcs = 0;
+  use_real_funcs = false;
   return;
 }
