@@ -1,0 +1,5 @@
+data*/**
+other_data/**
+**/*.txt
+**/*.so
+*.png
