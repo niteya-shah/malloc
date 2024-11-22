@@ -43,7 +43,7 @@ class ColorbarFormatter(LogFormatter):
     def __call__(self, x, pos = None):
         return format_bytes(x)
 
-name = 'data_tf'
+name = 'data_pytorch_2/'
 path = '/home/touchdown/work/c++/malloc/' + name
 dt = np.dtype([('alloc_size',np.intp),('start_sec',np.intp),
                   ('start_nsec',np.intp),('stop_sec',np.intp),
@@ -62,20 +62,28 @@ df_free['Type'] = 'free'
 
 for df in [df_malloc, df_calloc, df_realloc, df_free]:
 # for df in [df_free]:
-    df["alloc_time"] = (df.stop_sec - df.start_sec) * 1e3 + (df.stop_nsec - df.start_nsec) * 1e-6
+    df["alloc_time"] = (df.stop_sec - df.start_sec) * 1e9 + (df.stop_nsec - df.start_nsec)
     if len(df) > 0:
-        df["start"] = (df.start_sec - df.loc[0].start_sec) * 1e3 + (df.start_nsec - df.loc[0].start_nsec) * 1e-6
+        df["start"] = (df.start_sec - df.loc[0].start_sec) * 1e9 + (df.start_nsec - df.loc[0].start_nsec)
 
 df_alloc = pd.concat([df_malloc, df_calloc, df_realloc])
 df1 = df_alloc[["Type", "start", "alloc_size", "alloc_time"]]
 del df_alloc, df_malloc, df_calloc, df_realloc
 
-total_time  = 18.32
-df_free.alloc_time.sum()/total_time/10
-df1.alloc_time.sum()/total_time/10
-df_free[df_free.alloc_time > 1].alloc_time.sum()/total_time/10
-df1[df1.alloc_time > 0.5].alloc_time.sum()/total_time/10
-
+total_time  = 49.821192502975464 * 1e9
+(df_free.alloc_time - 62).sum()/total_time * 100
+(df1.alloc_time - 62.0).sum()/total_time * 100
+df_free[df_free.alloc_time > 3*1e6].alloc_time.sum()/total_time * 100
+df1[df1.alloc_time > 3*1e6].alloc_time.sum()/total_time * 100
+(62.0/df1.alloc_time).median() * 100
+free_time =  df_free.alloc_time[ df_free.alloc_time < 500]
+len(free_time)/len(df_free.alloc_time)
+## %%
+plt.hist(free_time, bins=50)
+plt.xlabel('Time(ns)')
+plt.ylabel('Count')
+plt.tight_layout()
+plt.show()
 ## %%
 fig, ax = plt.subplots(2, sharex=True)
 for i in df1["Type"].unique():

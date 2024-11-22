@@ -2,12 +2,13 @@
 
 #include <dlfcn.h>
 #include <errno.h>
+#include <immintrin.h>
 #include <malloc.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
-#include <stdbool.h>
 
 static FILE *fptr_malloc, *fptr_calloc, *fptr_realloc, *fptr_free;
 static void *(*real_malloc)(size_t) = NULL;
@@ -32,20 +33,30 @@ inline struct timespec sub_timespec(const struct timespec *restrict t1,
   return diff;
 }
 
-inline void write_data(FILE *restrict file, size_t size,
-                       const struct timespec *restrict start,
-                       const struct timespec *restrict stop) {
-  size_t data[5];
+inline void write_data(FILE *restrict file, size_t size, const size_t start,
+                       const size_t stop) {
+  size_t data[3];
 
   data[0] = size;
-  data[1] = start->tv_sec;
-  data[2] = start->tv_nsec;
-  data[3] = stop->tv_sec;
-  data[4] = stop->tv_nsec;
+  data[1] = start;
+  data[2] = stop;
 
-  fwrite(&data, sizeof(size_t), 5, file);
+  fwrite(&data, sizeof(size_t), 3, file);
 }
 
+#ifdef USE_CLOCKS
+inline size_t get_tick() {
+  struct timespec tick;
+  clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &tick);
+  return (tick.tv_sec) * 1e9 + tick.tv_nsec;
+}
+#else
+inline size_t get_tick() {
+  unsigned int aux;
+  size_t tick = __rdtscp(&aux);
+  return tick;
+}
+#endif
 __attribute__((constructor)) static void initValues(void) {
   bool previous_value = use_real_funcs;
   use_real_funcs = true;
@@ -145,72 +156,71 @@ void stop_capture() {
 }
 
 void *malloc(size_t size) {
-  if (use_real_funcs || !CAPTURE_INFO) {
-    return real_malloc(size);
-  }
-
-  struct timespec start, stop;
-  use_real_funcs = true;
-  clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &start);
-  // use_real_funcs = false;
-  char *p = real_malloc(size);
-  // use_real_funcs = 1;
-  clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &stop);
-  write_data(fptr_malloc, size, &start, &stop);
-  use_real_funcs = false;
-  return p;
+if (use_real_funcs || !CAPTURE_INFO) {
+return real_malloc(size);
 }
+
+use_real_funcs = true;
+size_t start = get_tick();
+use_real_funcs = false;
+char *p = real_malloc(size);
+use_real_funcs = true;
+size_t stop = get_tick();
+write_data(fptr_malloc, size, start, stop);
+use_real_funcs = false;
+return p;
+}
+
 
 void *calloc(size_t num, size_t size) {
-  if (use_real_funcs || !CAPTURE_INFO) {
-    return real_calloc(num, size);
-  }
-
-  struct timespec start, stop;
-  use_real_funcs = true;
-  clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &start);
-  // use_real_funcs = 0;
-  char *p = real_calloc(num, size);
-  // use_real_funcs = 1;
-  clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &stop);
-  write_data(fptr_calloc, size * num, &start, &stop);
-  use_real_funcs = false;
-
-  return p;
+if (use_real_funcs || !CAPTURE_INFO) {
+return real_calloc(num, size);
 }
 
+use_real_funcs = true;
+size_t start = get_tick();
+use_real_funcs = false;
+char *p = real_calloc(num, size);
+use_real_funcs = true;
+size_t stop = get_tick();
+write_data(fptr_calloc, size * num, start, stop);
+use_real_funcs = false;
+
+return p;
+}
+
+
 void *realloc(void *ptr, size_t size) {
-  if (use_real_funcs || !CAPTURE_INFO) {
-    return real_realloc(ptr, size);
-  }
+if (use_real_funcs || !CAPTURE_INFO) {
+return real_realloc(ptr, size);
+}
 
-  struct timespec start, stop;
-  use_real_funcs = true;
-  clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &start);
-  // use_real_funcs = 0;
-  char *p = real_realloc(ptr, size);
-  // use_real_funcs = 1;
-  clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &stop);
-  write_data(fptr_realloc, size, &start, &stop);
-  use_real_funcs = false;
+use_real_funcs = true;
+size_t start = get_tick();
+use_real_funcs = false;
+char *p = real_realloc(ptr, size);
+use_real_funcs = true;
+size_t stop = get_tick();
+write_data(fptr_realloc, size, start, stop);
+use_real_funcs = false;
 
-  return p;
+return p;
 }
 
 void free(void *ptr) {
   if (use_real_funcs || !CAPTURE_INFO) {
     return real_free(ptr);
   }
-
-  struct timespec start, stop;
   use_real_funcs = true;
   size_t size = malloc_usable_size(ptr);
-  clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &start);
-  // use_real_funcs = 0;
+  unsigned int aux;
+  size_t start = get_tick();
+  use_real_funcs = 0;
   real_free(ptr);
-  // use_real_funcs = 1;
-  clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &stop);
-  write_data(fptr_free, size, &start, &stop);
+  use_real_funcs = 1;
+  size_t stop = get_tick();
+  write_data(fptr_free, size, start, stop);
+
   use_real_funcs = false;
   return;
 }

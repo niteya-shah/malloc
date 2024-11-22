@@ -1,6 +1,6 @@
 # Compiler and flags
 CC = gcc
-CFLAGS = -O2 -fPIC -march=native
+CFLAGS = -O3 -fPIC -march=native
 LDFLAGS = -shared
 
 # Target name
