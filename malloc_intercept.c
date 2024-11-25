@@ -46,8 +46,10 @@ inline void write_data(FILE *restrict file, size_t size, const size_t start,
 
 #ifdef USE_CLOCKS
 inline size_t get_tick() {
+  use_real_funcs = true;
   struct timespec tick;
   clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &tick);
+  use_real_funcs = false;
   return (tick.tv_sec) * 1e9 + tick.tv_nsec;
 }
 #else
@@ -160,12 +162,10 @@ if (use_real_funcs || !CAPTURE_INFO) {
 return real_malloc(size);
 }
 
-use_real_funcs = true;
 size_t start = get_tick();
-use_real_funcs = false;
 char *p = real_malloc(size);
-use_real_funcs = true;
 size_t stop = get_tick();
+use_real_funcs = true;
 write_data(fptr_malloc, size, start, stop);
 use_real_funcs = false;
 return p;
@@ -177,12 +177,10 @@ if (use_real_funcs || !CAPTURE_INFO) {
 return real_calloc(num, size);
 }
 
-use_real_funcs = true;
 size_t start = get_tick();
-use_real_funcs = false;
 char *p = real_calloc(num, size);
-use_real_funcs = true;
 size_t stop = get_tick();
+use_real_funcs = true;
 write_data(fptr_calloc, size * num, start, stop);
 use_real_funcs = false;
 
@@ -195,12 +193,10 @@ if (use_real_funcs || !CAPTURE_INFO) {
 return real_realloc(ptr, size);
 }
 
-use_real_funcs = true;
 size_t start = get_tick();
-use_real_funcs = false;
 char *p = real_realloc(ptr, size);
-use_real_funcs = true;
 size_t stop = get_tick();
+use_real_funcs = true;
 write_data(fptr_realloc, size, start, stop);
 use_real_funcs = false;
 
@@ -213,14 +209,13 @@ void free(void *ptr) {
   }
   use_real_funcs = true;
   size_t size = malloc_usable_size(ptr);
+  use_real_funcs = false;
   unsigned int aux;
   size_t start = get_tick();
-  use_real_funcs = 0;
   real_free(ptr);
-  use_real_funcs = 1;
   size_t stop = get_tick();
+  use_real_funcs = true;
   write_data(fptr_free, size, start, stop);
-
   use_real_funcs = false;
   return;
 }
