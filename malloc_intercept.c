@@ -43,9 +43,8 @@ inline void write_data(FILE *restrict file, size_t size, const size_t start,
 
   fwrite(&data, sizeof(size_t), 3, file);
 }
-
 #ifdef USE_CLOCKS
-inline size_t get_tick() {
+static inline size_t get_tick() {
   use_real_funcs = true;
   struct timespec tick;
   clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &tick);
@@ -53,7 +52,7 @@ inline size_t get_tick() {
   return (tick.tv_sec) * 1e9 + tick.tv_nsec;
 }
 #else
-inline size_t get_tick() {
+static inline size_t get_tick() {
   unsigned int aux;
   size_t tick = __rdtscp(&aux);
   return tick;
@@ -91,32 +90,32 @@ void start_capture(char *restrict path) {
     if (fptr_malloc == NULL) {
       printf("Failed to open malloc file \n %s \n due to%d\n", temp_path,
              errno);
-      exit(0);
+      exit(1);
     }
   } else {
     printf("Failed to start malloc capture as already capturing");
-    exit(0);
+    exit(1);
   }
   if (!fptr_calloc) {
     strcpy(temp_path + strlen(path), "calloc_data.txt");
     fptr_calloc = fopen(temp_path, "w+");
   } else {
     printf("Failed to start calloc capture as already capturing");
-    exit(0);
+    exit(1);
   }
   if (!fptr_realloc) {
     strcpy(temp_path + strlen(path), "realloc_data.txt");
     fptr_realloc = fopen(temp_path, "w+");
   } else {
     printf("Failed to start realloc capture as already capturing");
-    exit(0);
+    exit(1);
   }
   if (!fptr_free) {
     strcpy(temp_path + strlen(path), "free_data.txt");
     fptr_free = fopen(temp_path, "w+");
   } else {
     printf("Failed to start free capture as already capturing");
-    exit(0);
+    exit(1);
   }
   CAPTURE_INFO = true;
   use_real_funcs = false;
@@ -130,14 +129,14 @@ void stop_capture() {
     fptr_malloc = NULL;
   } else {
     printf("Failed to stop malloc capture as not capturing");
-    exit(0);
+    exit(1);
   }
   if (fptr_calloc) {
     fclose(fptr_calloc);
     fptr_calloc = NULL;
   } else {
     printf("Failed to stop calloc capture as not capturing");
-    exit(0);
+    exit(1);
   }
 
   if (fptr_realloc) {
@@ -145,7 +144,7 @@ void stop_capture() {
     fptr_realloc = NULL;
   } else {
     printf("Failed to stop realloc capture as not capturing");
-    exit(0);
+    exit(1);
   }
 
   if (fptr_free) {
@@ -153,54 +152,52 @@ void stop_capture() {
     fptr_free = NULL;
   } else {
     printf("Failed to stop free capture as not capturing");
-    exit(0);
+    exit(1);
   }
 }
 
 void *malloc(size_t size) {
-if (use_real_funcs || !CAPTURE_INFO) {
-return real_malloc(size);
-}
+  if (use_real_funcs || !CAPTURE_INFO) {
+    return real_malloc(size);
+  }
 
-size_t start = get_tick();
-char *p = real_malloc(size);
-size_t stop = get_tick();
-use_real_funcs = true;
-write_data(fptr_malloc, size, start, stop);
-use_real_funcs = false;
-return p;
+  size_t start = get_tick();
+  char *p = real_malloc(size);
+  size_t stop = get_tick();
+  use_real_funcs = true;
+  write_data(fptr_malloc, size, start, stop);
+  use_real_funcs = false;
+  return p;
 }
-
 
 void *calloc(size_t num, size_t size) {
-if (use_real_funcs || !CAPTURE_INFO) {
-return real_calloc(num, size);
+  if (use_real_funcs || !CAPTURE_INFO) {
+    return real_calloc(num, size);
+  }
+
+  size_t start = get_tick();
+  char *p = real_calloc(num, size);
+  size_t stop = get_tick();
+  use_real_funcs = true;
+  write_data(fptr_calloc, size * num, start, stop);
+  use_real_funcs = false;
+
+  return p;
 }
-
-size_t start = get_tick();
-char *p = real_calloc(num, size);
-size_t stop = get_tick();
-use_real_funcs = true;
-write_data(fptr_calloc, size * num, start, stop);
-use_real_funcs = false;
-
-return p;
-}
-
 
 void *realloc(void *ptr, size_t size) {
-if (use_real_funcs || !CAPTURE_INFO) {
-return real_realloc(ptr, size);
-}
+  if (use_real_funcs || !CAPTURE_INFO) {
+    return real_realloc(ptr, size);
+  }
 
-size_t start = get_tick();
-char *p = real_realloc(ptr, size);
-size_t stop = get_tick();
-use_real_funcs = true;
-write_data(fptr_realloc, size, start, stop);
-use_real_funcs = false;
+  size_t start = get_tick();
+  char *p = real_realloc(ptr, size);
+  size_t stop = get_tick();
+  use_real_funcs = true;
+  write_data(fptr_realloc, size, start, stop);
+  use_real_funcs = false;
 
-return p;
+  return p;
 }
 
 void free(void *ptr) {
@@ -210,7 +207,6 @@ void free(void *ptr) {
   use_real_funcs = true;
   size_t size = malloc_usable_size(ptr);
   use_real_funcs = false;
-  unsigned int aux;
   size_t start = get_tick();
   real_free(ptr);
   size_t stop = get_tick();
